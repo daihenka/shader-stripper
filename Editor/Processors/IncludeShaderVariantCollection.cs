@@ -12,6 +12,7 @@ namespace Daihenka.ShaderStripper
     {
         [SerializeField] List<ShaderVariantCollection> shaderVariantCollections = new List<ShaderVariantCollection>();
         [SerializeField] bool matchWithoutLocalKeywords;
+        [SerializeField] bool onlyStripShadersInCollections;
         public List<ShaderVariantCollection> ShaderVariantCollections => shaderVariantCollections;
 
         List<ShaderVariant> variantCollections = new List<ShaderVariant>();
@@ -24,20 +25,25 @@ namespace Daihenka.ShaderStripper
         public override bool ShouldIncludeVariant(Shader shader, ShaderSnippetData snippet, ShaderCompilerData data)
         {
             var keywords = data.shaderKeywordSet.ToList(shader);
+            var shaderFound = false;
             foreach (var variant in variantCollections)
             {
-                if (variant.keywords.HasSameElements(keywords))
+                if (variant.shader == shader)
                 {
-                    return true;
-                }
+                    shaderFound = true;
+                    if (variant.keywords.HasSameElements(keywords))
+                    {
+                        return true;
+                    }
 
-                if (matchWithoutLocalKeywords && variant.globalKeywords.HasSameElements(keywords))
-                {
-                    return true;
+                    if (matchWithoutLocalKeywords && variant.globalKeywords.HasSameElements(keywords))
+                    {
+                        return true;
+                    }
                 }
             }
 
-            return false;
+            return onlyStripShadersInCollections && !shaderFound;
         }
 
         public override bool ShouldStripVariant(Shader shader, ShaderSnippetData snippet, ShaderCompilerData data)
@@ -52,6 +58,7 @@ namespace Daihenka.ShaderStripper
         ReorderableList m_List;
         IncludeShaderVariantCollection m_Target;
         SerializedProperty m_IncludeMatchesWithoutLocalKeywords;
+        SerializedProperty m_OnlyStripShadersInCollections;
         static Styles s_Styles;
 
         class Styles
@@ -62,6 +69,7 @@ namespace Daihenka.ShaderStripper
             public static readonly GUIContent shaderPreloadClear = EditorGUIUtility.TrTextContent("Clear", "Clear currently tracked shader variant information.");
             public static readonly GUIContent combineVariantCollections = EditorGUIUtility.TrTextContent("Combine", "Validates shader variants and combines all listed Shader Variant Collections into a single collection.");
             public static readonly GUIContent includeMatchWithoutLocalKeywords = EditorGUIUtility.TrTextContent("Include matches without local keywords when processing variants", "When this processor executes, test variants with and without local keywords.");
+            public static readonly GUIContent onlyStripShadersInCollections = EditorGUIUtility.TrTextContent("Only strip shaders that are listed in the collections", "When this processor executes, only strip shaders that are listed in the collections.  Shaders not in the collections will be skipped from this stripping processor.");
             public static readonly GUIContent optionsForStripping = EditorGUIUtility.TrTextContent("Options for stripping shader variants");
             public const string processorInfo = "This processor will include shader variants that are listed in the Shader Variant Collections.\nShader variants that are not in the Shader Variant Collections will be stripped.";
             public const string shaderVariantCollectionSave = "Save Shader Variant Collection";
@@ -75,6 +83,7 @@ namespace Daihenka.ShaderStripper
         {
             m_Target = (IncludeShaderVariantCollection) target;
             m_IncludeMatchesWithoutLocalKeywords = serializedObject.FindProperty("matchWithoutLocalKeywords");
+            m_OnlyStripShadersInCollections = serializedObject.FindProperty("onlyStripShadersInCollections");
             m_List = new ReorderableList(serializedObject, serializedObject.FindProperty("shaderVariantCollections"), true, true, true, true);
             m_List.drawHeaderCallback = rect => EditorGUI.LabelField(rect, Styles.shaderVariantCollections, EditorStyles.boldLabel);
             m_List.drawElementCallback = (rect, index, active, focused) => EditorGUI.PropertyField(rect, m_List.GetArrayElement(index), GUIContent.none);
@@ -108,20 +117,29 @@ namespace Daihenka.ShaderStripper
             base.OnInspectorGUI();
             DrawHelpBox(Styles.processorInfo);
             DrawGraphicsSettingsBlock();
+            GUILayout.Label(Styles.optionsForStripping, EditorStyles.boldLabel);
             DrawIncludeMatchesWithoutLocalKeywordsBlock();
+            DrawOnlyStripShadersInCollectionBlock();
+            EditorGUILayout.Space(12);
             m_List.DoLayoutList();
             serializedObject.ApplyModifiedProperties();
         }
 
+        void DrawOnlyStripShadersInCollectionBlock()
+        {
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.PropertyField(m_OnlyStripShadersInCollections, GUIContent.none, GUILayout.Width(16));
+            GUILayout.Label(Styles.onlyStripShadersInCollections);
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+        }
         void DrawIncludeMatchesWithoutLocalKeywordsBlock()
         {
-            GUILayout.Label(Styles.optionsForStripping, EditorStyles.boldLabel);
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.PropertyField(m_IncludeMatchesWithoutLocalKeywords, GUIContent.none, GUILayout.Width(16));
             GUILayout.Label(Styles.includeMatchWithoutLocalKeywords);
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
-            EditorGUILayout.Space(12);
         }
 
         void DrawGraphicsSettingsBlock()
